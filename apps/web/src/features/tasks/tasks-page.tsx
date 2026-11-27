@@ -253,7 +253,7 @@ export default function TasksPage() {
         </div>
       ) : (
         <EmptyState
-          title="暂无任务"
+          title="当前没有任务"
           description="在已确认的情报中创建选题或建联任务。"
           action={
             <Button asChild size="sm" variant="outline">
