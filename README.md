@@ -58,6 +58,7 @@ pnpm test
 pnpm test:smoke
 ```
 
+所有集成测试必须在隔离测试环境中运行。
 集成脚本验证真实登录、关闭注册、成员权限、去重、跨成员可见性和退出；未配置模型时还验证真实 Redis 投递与 Worker 重试失败，结束后清理临时记录。真实模型与搜索另做了显式调用验证；每日调度另有真实时钟自测（`SCHEDULE_REAL_MODEL=1 pnpm test:schedules`，会调用收费模型）；这些结果不代表已完成生产上线验收。
 
 - [开发与启动说明](./docs/development.md)
