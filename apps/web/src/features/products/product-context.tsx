@@ -71,6 +71,7 @@ export function ProductWorkspace({
       params.delete('watch');
       params.delete('competitor');
       params.delete('batch');
+      params.delete('creator');
       params.delete('drama');
       params.delete('fromRun');
       sessionStorage.removeItem(preferenceKey);
@@ -141,6 +142,7 @@ export function ProductWorkspace({
                   'watch',
                   'competitor',
                   'batch',
+                  'creator',
                   'drama',
                 ])
                   params.delete(key);

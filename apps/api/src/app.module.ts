@@ -1,3 +1,4 @@
+import { OutreachModule } from './modules/outreach/outreach.module.js';
 import { SourcesModule } from './modules/sources/sources.module.js';
 import { BriefsModule } from './modules/briefs/briefs.module.js';
 import { ResearchConversationsModule } from './modules/research-conversations/research-conversations.module.js';
@@ -29,6 +30,7 @@ import { ResearchModule } from './modules/research/research.module.js';
     ResearchModule,
     CandidatesModule,
     TasksModule,
+    OutreachModule,
     ScoringModule,
     SourcesModule,
     BriefsModule,
