@@ -59,7 +59,7 @@ const webPort = 5173 + slot;
 const sourceEnv = path.join(root, '.env');
 const targetEnv = path.join(targetDir, '.env');
 
-if (fs.existsSync(sourceEnv)) {
+if (!args.includes('--no-env') && fs.existsSync(sourceEnv)) {
   let content = fs.readFileSync(sourceEnv, 'utf8');
   const upsert = (key, value) => {
     const pattern = new RegExp(`^${key}=.*$`, 'm');
