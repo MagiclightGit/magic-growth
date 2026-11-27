@@ -65,6 +65,7 @@ if (subcommand === 'listen') {
     id: getFlag('--request-id'),
     watch: args.includes('--watch'),
     autoMerge: args.includes('--auto-merge'),
+    autoReview: args.includes('--auto-review'),
   });
 } else if (subcommand === 'reply') {
   const messageId = getFlag('--message-id');

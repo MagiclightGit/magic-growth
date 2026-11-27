@@ -42,7 +42,8 @@ export function inbound(event, config) {
   const approval = /^确认需求\s+([a-f0-9]{12})\s+([a-f0-9]{12})$/u.exec(
     content,
   );
-  if (!approval && !requestPattern.test(content)) return null;
+  const merge = /^确认合入\s+([a-f0-9]{12})\s+([a-f0-9]{40})$/u.exec(content);
+  if (!approval && !merge && !requestPattern.test(content)) return null;
 
   return {
     id: event.message_id,
@@ -55,6 +56,7 @@ export function inbound(event, config) {
     sender: event.sender_id,
     content,
     approval: approval?.slice(1) ?? null,
+    ...(merge ? { merge: merge.slice(1) } : {}),
   };
 }
 
@@ -119,11 +121,13 @@ export async function processInbox(db, config, services) {
     if (
       config.message &&
       event.id !== config.message &&
-      event.approval?.[0] !== digest(config.message).slice(0, 12)
+      (event.approval ?? event.merge)?.[0] !==
+        digest(config.message).slice(0, 12)
     )
       continue;
     try {
-      if (event.approval) await approve(db, config, services, event);
+      if (event.merge) await approveMerge(db, config, services, event);
+      else if (event.approval) await approve(db, config, services, event);
       else await draftRequest(db, services, event);
       db.prepare('UPDATE inbox SET handled = 1, error = NULL WHERE id = ?').run(
         row.id,
@@ -175,32 +179,57 @@ async function draftRequest(db, services, event) {
   db.prepare('UPDATE requests SET reply_id = ? WHERE id = ?').run(replyId, id);
 }
 
+async function canApprove(config, services, event, request) {
+  if (
+    !config.approvers.has(event.sender) ||
+    !request ||
+    !request.reply_id ||
+    JSON.parse(request.draft).needsDecision
+  )
+    return false;
+  const origin = JSON.parse(request.origin);
+  return (
+    origin.chat === event.chat &&
+    ([origin.root, origin.id, request.reply_id].includes(event.root) ||
+      Boolean(
+        event.thread &&
+        event.thread ===
+          (origin.thread ?? (await services.thread(request.reply_id))),
+      ))
+  );
+}
+
+async function approveMerge(db, config, services, event) {
+  const [id, head] = event.merge;
+  const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(id);
+  if (!(await canApprove(config, services, event, request))) return;
+  const update = db
+    .prepare(
+      `
+    UPDATE development_jobs
+    SET report = json_set(report, '$.autoMergeHead', ?)
+    WHERE request_id = ? AND status = 'published'
+      AND json_extract(report, '$.reviewHead') = ?
+  `,
+    )
+    .run(head, id, head);
+  if (update.changes) return;
+  await services.reply(
+    event.id,
+    '该提交尚未完成自动验收，或提交已更新。请以原话题最新的验收回执为准。',
+    digest(`merge-unavailable:${event.id}`),
+  );
+}
+
 async function approve(db, config, services, event) {
   const [id, revision] = event.approval;
   const request = db.prepare('SELECT * FROM requests WHERE id = ?').get(id);
   if (
-    !config.approvers.has(event.sender) ||
-    !request ||
-    request.revision !== revision
+    request?.revision !== revision ||
+    !(await canApprove(config, services, event, request))
   )
     return;
   const origin = JSON.parse(request.origin);
-  if (
-    origin.chat !== event.chat ||
-    !request.reply_id ||
-    JSON.parse(request.draft).needsDecision
-  )
-    return;
-  const sameRoot = [origin.root, origin.id, request.reply_id].includes(
-    event.root,
-  );
-  if (
-    !sameRoot &&
-    (!event.thread ||
-      event.thread !==
-        (origin.thread ?? (await services.thread(request.reply_id))))
-  )
-    return;
 
   db.prepare(
     'UPDATE requests SET approved_by = COALESCE(approved_by, ?) WHERE id = ?',
