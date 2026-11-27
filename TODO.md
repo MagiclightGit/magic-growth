@@ -244,6 +244,6 @@ S1 的页面布局可在契约确定后与数据层并行；S2 先完成手工�
 - [x] **UI-02 壳层与核心高频页面去 AI 味改造**：重构 `WorkspaceShell`（三组业务导航、每日简报直达、去装饰胶囊）、`ProductWorkspace` 紧凑上下文栏、`LoginPage`（去营销二分屏与英文口号）、`OverviewPage`（去 4 格装饰 KPI 大卡，改可跳转统计条 + 结构化面板）、`IntelligencePage` & `CandidatesPage`（下划线 Tab、统一筛选栏、语义状态标签）、`TasksPage`（大卡片列表改为现代 B 端紧凑表格）。
 - [ ] **UI-03 其余次级页面设计一致性走查**：按 `docs/design-system.md` 逐页走查并微调 `/research`、`/schedules`、`/competitors`、`/dramas`、`/briefs`、`/products`、`/settings`、`/members` 的语义状态标签与筛选密度；使用 `pnpm verify:ui` 产出真实桌面/移动端截图完成人工走查验收。
 - [x] **DEV-01 仓库 AI-friendly 基础脚本与验收模板**：新增 `pnpm env:check`（自动化环境检查）、`pnpm worktree:init`（多 Agent 并发目录/端口隔离）、`pnpm verify:ui`（Playwright 自动登录与桌面/移动端截图证据包生成脚本）、`docs/templates/feature-spec.md`（Feature 验收标准模板）与 `pnpm feishu:intake`（基于 `lark-cli` 的飞书群消息采集与话题回写脚手架）。
-- [ ] **DEV-02 Git 仓库基线与提交门禁**：完成首次基线提交并关联远程 GitHub/GitLab 仓库，验证 GitHub Actions CI 远程运行，配置 PR 评审与分支保护门禁。
-- [ ] **DEV-03 Playwright 浏览器 E2E 与截图验收实跑**：安装 Playwright Chromium，沉淀核心用户路径（登录、权限隔离、产品切换、情报筛选、候选审核、任务流转）的稳定 E2E 用例，并实测 `pnpm verify:ui` 产出截图证据。
+- [ ] **DEV-02 Git 仓库基线与提交门禁**：基线已推送 GitHub。修复 CI 的 Redis 容器启动及无模型配置时的工作流验证，PR 评审规则和分支保护仍待配置。
+- [ ] **DEV-03 Playwright 浏览器 E2E 与截图验收实跑**：Playwright 已锁定依赖。本地隔离环境使用管理员账号验证登录，并为登录页及 12 个工作台路由产出桌面和移动端截图。权限隔离、产品切换、情报筛选、候选审核和任务流转的浏览器用例仍待补齐。
 - [ ] **DEV-04 飞书群需求闭环实测与常驻测试机上线**：在飞书开放平台完成自建机器人应用授权（`im.message.receive_v1` 与回复权限），在 24 小时常驻测试机配置专用测试账号与隔离库，打通「飞书群 `@机器人` → 需求整理确认 → 建单（飞书多维表格/Issue）→ Agent Worktree 开发与证据验收 → 进展回写飞书话题」。

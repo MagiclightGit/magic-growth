@@ -58,7 +58,7 @@ pnpm dev
 
 ## 研究配置与当前边界
 
-首个适配器使用 OpenAI Responses 模型与服务端 Web Search 工具。将 `OPENAI_API_KEY` 和 `RESEARCH_MODEL` 写入根目录 `.env`；使用兼容中转站时另设 `OPENAI_BASE_URL`（例如 `https://your-provider.example/v1`），留空则使用 OpenAI 默认地址。模型和中转站都必须支持 Responses 与服务端 Web Search；不要把密钥放入 `VITE_*` 变量。重启 API 和 Worker 后，页面显示配置状态。已配置只表示存在凭据，不代表已验证外部可用性；真实运行结果才是验证依据。
+首个适配器使用 OpenAI Responses 模型与服务端 Web Search 工具。将 `OPENAI_API_KEY` 和 `RESEARCH_MODEL` 写入根目录 `.env`。使用兼容中转站时另设 `OPENAI_BASE_URL`（例如 `https://your-provider.example/v1`）。使用 OpenAI 默认地址时省略或注释该变量，空字符串会导致 Worker 启动失败。模型和中转站都必须支持 Responses 与服务端 Web Search。密钥只配置在服务端。重启 API 和 Worker 后，页面会显示配置状态，外部可用性以真实运行结果为准。
 
 本机已复用 Codex 的 `packycode` 中转配置：`https://cf.api.fan/v1`、`gpt-6.1-sol`，推理强度沿用 provider 的默认 medium。密钥只保存于 gitignored 的本地 `.env`，不会随仓库分发；项目运行时不再读取 Codex 配置。2026-11-17 已验证最小文本请求、强制调用 Web Search 并返回来源，以及通过业务 API 入队、独立 Worker 搜索、保存报告和事件的完整链路（首次执行成功）。联调临时账号与报告已清理。以后更换模型、地址或密钥时需重新验证；中转站返回的 token 统计应与其账单核对，尚无费用记账功能。
 
@@ -234,7 +234,10 @@ pnpm env:check
 # 为并行开发的 Agent 创建隔离目录、分支与端口（slot 1..9）
 pnpm worktree:init <task-slug> --slot 1
 
-# 自动采集桌面/移动端页面截图与控制台错误报告（需安装 playwright 与 chromium，并启动本地/测试服务）
+# 首次安装 Chromium（Playwright 随工作区依赖安装）
+pnpm exec playwright install chromium
+
+# 服务启动后采集桌面与移动端截图、横向溢出和控制台错误
 VERIFY_UI_URL=http://localhost:5173 VERIFY_UI_EMAIL=test@example.com VERIFY_UI_PASSWORD=... pnpm verify:ui
 
 # 检查 lark-cli / 启动飞书群需求监听 / 回写群话题进展
@@ -242,3 +245,5 @@ pnpm feishu:intake -- --check
 pnpm feishu:intake -- listen
 pnpm feishu:intake -- reply --message-id <om_xxx> --markdown "已提交 PR，待验收" --dry-run
 ```
+
+`pnpm verify:ui` 默认验证登录页、概览、情报收件箱、候选和任务中心。省略账号和密码时只验证登录页。用逗号分隔的 `VERIFY_UI_ROUTES` 可覆盖登录后的路由列表。团队成员页需要管理员账号。报告记录服务地址、账号角色、提交和每页检查结果，页面跳转异常、控制台错误和整页横向溢出会使命令失败。
