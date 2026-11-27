@@ -53,32 +53,60 @@ flowchart LR
 1. 在飞书开放平台创建企业自建应用，开启**机器人**能力。
 2. 订阅事件：`im.message.receive_v1`（接收群聊 `@机器人` 消息），事件推送方式建议优先**长连接模式**（无需公网回调域名，配合 `lark-cli event consume` 直接在常驻机运行）。
 3. 申请最小必要权限：读取群消息与话题上下文、以机器人身份回复群消息/话题；如需同步到飞书多维表格（Base）或飞书任务，再追加对应域权限。
-4. 在常驻机完成 `lark-cli auth login` 并验证 `pnpm feishu:intake -- --check`。
+4. 发布应用版本并将机器人加入指定测试群。使用 `lark-cli auth status --json --verify` 核对 `identities.bot.verified`。机器人使用应用凭据。读取群话题、回帖和建单分别需要消息读取、机器人发消息及 `task:task:write` 权限。
 
 ### 3.2 24 小时常驻测试机（Mac mini / Linux VM / 独立 Staging）
 
 - 安装 Node 24、pnpm 10.32.1、Docker（PostgreSQL 17 / Redis 7）、Git、Playwright Chromium 与 `lark-cli`。
 - 准备专用测试账号（`admin`、`operator`、`viewer` 三个角色）与隔离测试数据库，**严禁指向生产库或生产 Redis**。
-- 常驻监听进程（示例）：
+- 单个常驻监听进程（示例）：
   ```bash
   # 检查本机与 lark-cli 就绪状态
   pnpm env:check
   pnpm feishu:intake -- --check
 
-  # 启动飞书群消息事件监听（收到触发词后写入 artifacts/feishu-intake/）
-  pnpm feishu:intake -- listen
+  export FEISHU_WORKFLOW_CHATS=oc_your_test_group
+  export FEISHU_WORKFLOW_APPROVERS=ou_your_approver
+
+  # 只验证事件接收及持久化
+  pnpm feishu:intake -- listen --timeout 3m
+
+  # 启用需求草案、原话题回帖和审批后建单
+  pnpm feishu:intake -- listen --apply
   ```
 
-## 4. 当前已交付 vs 待接入状态（如实记录）
+## 4. 测试群验收
 
-- **已交付到仓库**：
-  - [现代 B 端办公设计规范](./design-system.md) 与前端基础主题/高频页改造
-  - [Feature 需求与验收标准模板](./templates/feature-spec.md)
-  - `pnpm env:check`（自动化环境自检）
-  - `pnpm worktree:init`（多 Agent 并发 Worktree 与端口隔离）
-  - `pnpm verify:ui`（Playwright 自动登录、桌面/移动端截图与证据报告脚本）
-  - `pnpm feishu:intake`（基于 `lark-cli` 的飞书群消息采集与话题回写脚手架）
-- **尚未接入/验证（需团队资源就绪后推进）**：
-  - 仓库首次 Git 基线提交与远程 GitHub/GitLab 仓库配置
-  - 常驻测试机安装 Playwright Chromium 并跑通首次 E2E 回归
-  - 飞书开放平台机器人应用授权、群聊真实 `@机器人` 联调与多维表格/Issue 自动建单联动
+1. 等待监听器输出 `[event] ready`，在指定群的话题内 @机器人 并发 `#需求 添加测试反馈`。收到后监听器记录消息 ID。私聊、其他群或只 @群成员的消息会被忽略。
+2. 用 `--apply` 启动后，监听器读取原消息及最近 20 条话题消息，由常驻机的 Codex 生成草案并回复。群内容会作为输入发送给常驻机配置的模型，中转服务应获准处理该群数据。需要拍板的草案请先补充决定，再触发新草案。
+3. 在同一话题，由 `FEISHU_WORKFLOW_APPROVERS` 指定的人 @机器人 并发送草案附带的 `确认需求 <编号> <版本>`。同群同话题通过版本匹配后才创建飞书任务，任务先指派给审批人，原话题收到任务链接。公开 GitHub 仓库不承载群讨论或草案正文。
+4. 重复投递、重启前中断和上游暂时失败由 SQLite 收件箱恢复。默认路径为 `artifacts/feishu-intake/workflow.sqlite`。常驻机可用 `FEISHU_WORKFLOW_DB` 指向持久磁盘，用同一个监听器处理该数据库。保留数据库及其 WAL 和共享内存文件，失败待处理项每分钟重试。
+
+单条需求联调可在 `listen --apply` 后加 `--message-id om_...`，处理指定的已入库需求和对应的确认事件。确认需要在原话题中发送。审批时支持飞书仅提供 `thread_id` 的事件。
+
+回复一条飞书 Wiki 或 Docx 分享消息时，可以直接 @机器人 并发送 `#需求`。机器人最多读取三篇文档，每篇正文最多纳入 9000 字符。对每篇文档中首个 10 MB 以内的 ZIP，常驻机用 `python3` 读取目录和最多八份 README 或 `docs/` 下 Markdown 文档的片段。草案用飞书富文本回帖。
+
+Git 基线已推送，GitHub CI 和本地管理员浏览器截图验收已通过。2026-11-27 在测试群验证了真实 @ 消息经飞书长连接入库，以及 Codex 生成草案并回帖。审批用例沿用申报人明确的验收条件，人工修订草案后发布新版口令。审批人发送两次相同口令，两条事件均处理完成，飞书返回同一条测试任务，负责人核验为 chenhao，原话题仅收到一条任务链接回帖。
+
+## 5. 开发队列与 PR 回写
+
+常驻机需能运行 `codex exec` 和访问仓库的 `gh`、`git`。三个进程使用相同的 `FEISHU_WORKFLOW_DB`，由常驻机的进程管理器负责运行和重启。
+
+```bash
+# 新通过审批的需求自动排队
+pnpm feishu:intake -- listen --apply --develop
+
+# 领取队列中的需求，创建 Worktree 并运行检查
+pnpm feishu:intake -- develop --watch
+
+# 自动回写开发结果、PR 状态与 CI 结果
+pnpm feishu:intake -- sync --watch
+```
+
+开发进程串行领取任务，使用 `origin/main` 和 slot 1 创建 Worktree，部署时为此进程保留该 slot。Worktree 跳过主工作区的 `.env`，需要集成测试或截图时使用专用的隔离测试环境。首次飞书建单验收中已有的任务不会被扫描加入开发队列。
+
+开发 Agent 产出改动后，脚本独立运行构建、类型检查、Lint、格式检查和测试。检查日志与差异摘要保存在 `artifacts/feishu-development/<需求编号>/`。失败后保留 Worktree，定位并修复后可通过 `pnpm feishu:intake -- retry --request-id <需求编号>` 重新排队。
+
+人工审阅 Worktree 中的代码和检查输出后，运行 `pnpm feishu:intake -- publish --request-id <需求编号>` 创建草稿 PR。前端改动需在隔离环境运行 `pnpm verify:ui`，并在发布时以 `FEISHU_WORKFLOW_UI_EVIDENCE_URL` 提供该需求的可访问证据链接。发布脚本校验提交树与检查后记录一致，PR 正文仅包含需求编号和检查结果。回写进程在 CI 首次失败和 PR 合并或关闭时通知原话题。CI 的实时进度和通过结果可从 PR 查看。审阅后在发布命令加上 `--auto-merge`，即授权机器人合并该提交。机器人将 PR 标记为可审阅，等 GitHub 的 `CI / verify` 与其余检查全部通过且 PR 可合并，再通过 GitHub 合入 `main`。更新 PR 提交后，自动合并会停在原来授权的提交。生产发布由原有发布流程处理。
+
+测试群的 README 需求已完成真实审批、建单、排队和 Worktree 开发，五项本地检查通过。首次 CI 在 Redis 容器初始化时失败，失败状态已回到原话题。CI 修复合入后，README PR 同步 `main`、通过 CI 并合入。飞书原话题收到对应提交的 CI 通过与 PR 已合并状态。[README 验收 PR](https://github.com/MagiclightGit/magic-growth/pull/2) · [CI 修复 PR](https://github.com/MagiclightGit/magic-growth/pull/1)

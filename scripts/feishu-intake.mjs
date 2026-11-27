@@ -4,13 +4,12 @@
  *
  * 子命令：
  *   --check                                检查 lark-cli 可用性（不启动长驻监听）
- *   listen [--trigger "#需求,创建任务"]      通过 lark-cli event consume 监听群消息并落盘到 artifacts/feishu-intake/
+ *   listen [--timeout 30s] [--apply]        监听指定群并持久化，带 --apply 时处理草案与审批
  *   reply --message-id <om_xxx> --text <t> [--dry-run]  向原飞书消息/话题回写进展
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import readline from 'node:readline';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { listen } from './feishu/runner.mjs';
+import { developmentCommand } from './feishu/development.mjs';
 
 const args = process.argv.slice(2).filter((a) => a !== '--');
 const subcommand = args[0] || '--check';
@@ -55,81 +54,17 @@ if (subcommand === '--check' || subcommand === 'check') {
 }
 
 if (subcommand === 'listen') {
-  ensureLarkCli();
-  const triggers = getFlag('--trigger', '#需求,创建任务,提需求')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const outDir = path.join(process.cwd(), 'artifacts', 'feishu-intake');
-  fs.mkdirSync(outDir, { recursive: true });
-
-  console.log(
-    `启动飞书群消息监听（事件 im.message.receive_v1，触发关键词: ${triggers.join(' / ')}）...`,
-  );
-  const child = spawn(
-    'lark-cli',
-    ['event', 'consume', 'im.message.receive_v1', '--as', 'bot'],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
-  );
-
-  // 保持 stdin 打开以防止无界监听因 EOF 提前退出（遵循 lark-event 契约）
-  const keepAlive = setInterval(() => {}, 60_000);
-  const shutdown = () => {
-    clearInterval(keepAlive);
-    child.stdin.end();
-    child.kill('SIGTERM');
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  const errRl = readline.createInterface({ input: child.stderr });
-  errRl.on('line', (line) => {
-    console.error(line);
+  await listen({
+    apply: args.includes('--apply'),
+    timeout: getFlag('--timeout'),
+    message: getFlag('--message-id'),
+    develop: args.includes('--develop'),
   });
-
-  const outRl = readline.createInterface({ input: child.stdout });
-  outRl.on('line', (line) => {
-    if (!line.trim()) return;
-    try {
-      const payload = JSON.parse(line);
-      const event = payload.event ?? payload;
-      const msg = event.message ?? {};
-      const content = String(msg.content ?? '');
-      const mentions = Array.isArray(msg.mentions) ? msg.mentions : [];
-      const matched =
-        mentions.length > 0 || triggers.some((kw) => content.includes(kw));
-      if (!matched) return;
-
-      const id = String(
-        msg.message_id || payload.header?.event_id || Date.now(),
-      ).replace(/[^\w-]/g, '_');
-      const file = path.join(outDir, `${id}.json`);
-      fs.writeFileSync(
-        file,
-        JSON.stringify(
-          {
-            receivedAt: new Date().toISOString(),
-            chatId: msg.chat_id ?? null,
-            threadId: msg.thread_id ?? null,
-            messageId: msg.message_id ?? null,
-            senderId: event.sender?.sender_id?.open_id ?? null,
-            content,
-            raw: payload,
-          },
-          null,
-          2,
-        ),
-        'utf8',
-      );
-      console.log(`[INTAKE] 已保存群需求事件 -> ${file}`);
-    } catch (err) {
-      console.error('[WARN] 无法解析事件行：', err);
-    }
-  });
-
-  child.on('exit', (code) => {
-    clearInterval(keepAlive);
-    process.exit(code ?? 0);
+} else if (['develop', 'publish', 'retry', 'sync'].includes(subcommand)) {
+  await developmentCommand(subcommand, {
+    id: getFlag('--request-id'),
+    watch: args.includes('--watch'),
+    autoMerge: args.includes('--auto-merge'),
   });
 } else if (subcommand === 'reply') {
   const messageId = getFlag('--message-id');
@@ -162,6 +97,8 @@ if (subcommand === 'listen') {
   ensureLarkCli();
   execFileSync('lark-cli', cmdArgs, { stdio: 'inherit' });
 } else {
-  console.error(`未知子命令：${subcommand}\n支持：--check | listen | reply`);
+  console.error(
+    `未知子命令：${subcommand}\n支持：--check | listen | reply | develop | publish | retry | sync`,
+  );
   process.exit(1);
 }
