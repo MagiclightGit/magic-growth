@@ -12,6 +12,7 @@ import {
   Inbox,
   LayoutGrid,
   LogOut,
+  Mail,
   Menu,
   Moon,
   Package,
@@ -54,6 +55,7 @@ const navGroups: NavGroup[] = [
       { path: '/', label: '工作台概览', icon: LayoutGrid },
       { path: '/briefs', label: '每日简报', icon: FileText },
       { path: '/tasks', label: '任务中心', icon: CheckSquare },
+      { path: '/outreach', label: '创作者建联', icon: Mail },
     ],
   },
   {

@@ -6,11 +6,14 @@ import {
   catalog,
   createDatabase,
   growth,
+  outreach,
   canAccessProduct,
 } from '@guangmo/database';
 import {
   COLLECTION_WORKFLOW_VERSION,
   type Product,
+  type Creator,
+  type CsvBatch,
   type CandidateInput,
 } from '@guangmo/contracts';
 import { provisionMember } from '../modules/members/provision-member.js';
@@ -116,6 +119,93 @@ try {
   assert.deepEqual(
     (await json<Product[]>('/products', operator)).map((p) => p.id),
     [products[0]],
+  );
+  const outreachPath = '/outreach/' + products[0];
+  const creatorInput = {
+    link: 'http://example.com/creator?utm_source=manual',
+    email: 'creator@example.com',
+  };
+  const manual = await json<{ creator: Creator; duplicate: boolean }>(
+    outreachPath + '/creators',
+    operator,
+    'POST',
+    creatorInput,
+  );
+  assert.equal(manual.duplicate, false);
+  assert.equal(manual.creator.link, creatorInput.link);
+  const repeated = await json<typeof manual>(
+    outreachPath + '/creators',
+    operator,
+    'POST',
+    { link: 'https://example.com/creator/#bio' },
+  );
+  assert.equal(repeated.duplicate, true);
+  assert.equal(repeated.creator.id, manual.creator.id);
+  const file = {
+    filename: 'review.csv',
+    csv: 'link,name,email\nhttps://example.com/creator,,\nhttps://example.com/new,Creator,\ninvalid,,\nhttps://example.com/new/,Duplicate,',
+  };
+  const preview = await json<CsvBatch>(
+    outreachPath + '/batches/preview',
+    operator,
+    'POST',
+    file,
+  );
+  assert.deepEqual(
+    preview.rows.map((row) => [row.line, row.status]),
+    [
+      [2, 'duplicate'],
+      [3, 'valid'],
+      [4, 'failed'],
+      [5, 'duplicate'],
+    ],
+  );
+  assert.equal(
+    (await json<Creator[]>(outreachPath + '/creators', operator)).length,
+    1,
+  );
+  const imports = await Promise.all(
+    [operator, admin].map((actor) =>
+      json<CsvBatch>(outreachPath + '/batches', actor, 'POST', file),
+    ),
+  );
+  const imported = imports
+    .flatMap((batch) => batch.rows)
+    .filter((row) => row.status === 'created');
+  assert.equal(imported.length, 1);
+  const batch = imports.find((value) =>
+    value.rows.some((row) => row.status === 'created'),
+  )!;
+  const detailPath = outreachPath + '/creators/' + imported[0]!.creatorId;
+  assert.equal(
+    (await json<{ creator: Creator }>(detailPath, viewer)).creator.batchId,
+    batch.id,
+  );
+  assert.deepEqual(
+    (await json<CsvBatch>(outreachPath + '/batches/' + batch.id, viewer)).rows,
+    batch.rows,
+  );
+  for (const path of [
+    outreachPath + '/creators',
+    detailPath,
+    outreachPath + '/batches/' + batch.id,
+  ])
+    assert.equal((await request(path, empty)).status, 403);
+  for (const [path, body] of [
+    [outreachPath + '/creators', creatorInput],
+    [outreachPath + '/batches', file],
+    [outreachPath + '/messages', {}],
+  ] as const)
+    assert.equal((await request(path, viewer, 'POST', body)).status, 403);
+  const otherProduct = '/outreach/' + products[1];
+  assert.equal(
+    (await request(otherProduct + '/creators/' + manual.creator.id, admin))
+      .status,
+    404,
+  );
+  assert.equal(
+    (await request(otherProduct + '/batches/' + batch.id, admin)).status,
+    404,
   );
   assert.deepEqual(await json('/intelligence', empty), []);
   assert.equal(
@@ -385,7 +475,7 @@ try {
   assert.ok(audit.some((r) => r.action === 'member.products'));
   assert.ok(audit.some((r) => r.action === 'product.created'));
   console.log(
-    'PASS: dynamic catalog, default-deny grants, scoped lists/overview/details/SSE, cross-product mutation rejection, assignee access, live revocation, revisions, archival, background policy and audit.',
+    'PASS: dynamic catalog, default-deny grants, scoped lists/overview/details/SSE, cross-product mutation rejection, assignee access, live revocation, revisions, archival, background policy, creator import isolation, concurrent deduplication and audit.',
   );
 } finally {
   if (items.length) {
@@ -414,6 +504,12 @@ try {
       );
     await db.delete(auth.user).where(inArray(auth.user.id, users));
   }
+  await db
+    .delete(outreach.creators)
+    .where(inArray(outreach.creators.product, products));
+  await db
+    .delete(outreach.batches)
+    .where(inArray(outreach.batches.product, products));
   await db
     .delete(catalog.products)
     .where(inArray(catalog.products.id, products));

@@ -1,3 +1,4 @@
+import { reconcileOutreach } from './workflows/outreach.js';
 import {
   executeCollection,
   failCollection,
@@ -402,9 +403,27 @@ const timer = setInterval(() => {
 void reconcile().catch((error: unknown) =>
   console.error('Initial reconciliation:', error),
 );
+let outreachTick: Promise<void> | undefined;
+function pollOutreach() {
+  if (outreachTick) return;
+  outreachTick = reconcileOutreach(db)
+    .catch((error: unknown) =>
+      console.error(
+        'Gmail pilot reconciliation failed:',
+        error instanceof Error ? error.name : 'UnknownError',
+      ),
+    )
+    .finally(() => {
+      outreachTick = undefined;
+    });
+}
+const outreachTimer = setInterval(pollOutreach, 15000);
+pollOutreach();
 console.log('Guangmo research worker started.');
 async function shutdown() {
   clearInterval(timer);
+  clearInterval(outreachTimer);
+  await outreachTick;
   await worker.close();
   await queue.close();
   connection.disconnect();

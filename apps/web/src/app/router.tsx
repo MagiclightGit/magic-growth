@@ -11,6 +11,7 @@ const Research = lazy(() => import('@/features/research/research-page'));
 const Briefs = lazy(() => import('@/features/intelligence/briefs-page'));
 const Schedules = lazy(() => import('@/features/research/schedules-page'));
 const Candidates = lazy(() => import('@/features/candidates/candidates-page'));
+const Outreach = lazy(() => import('@/features/outreach/outreach-page'));
 const Tasks = lazy(() => import('@/features/tasks/tasks-page'));
 const Members = lazy(() => import('@/features/members/members-page'));
 const Products = lazy(() => import('@/features/products/products-page'));
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
       { path: 'competitors', element: <Competitors /> },
       { path: 'dramas', element: <Dramas /> },
       { path: 'tasks', element: <Tasks /> },
+      { path: 'outreach', element: <Outreach /> },
       { path: 'products', element: <Products /> },
       { path: 'members', element: <Members /> },
       { path: 'settings', element: <Settings /> },

@@ -7,11 +7,13 @@ import * as auth from './schema/auth.js';
 import * as competitorResearch from './schema/competitor-research.js';
 import * as marketWatch from './schema/market-watch.js';
 import * as catalog from './schema/products.js';
+import * as outreach from './schema/outreach.js';
 import * as growth from './schema/growth.js';
 export const schema = {
   ...auth,
   ...researchConversations,
   ...growth,
+  ...outreach,
   ...collection,
   dailyBriefs,
   ...catalog,
@@ -21,6 +23,7 @@ export const schema = {
 export {
   auth,
   growth,
+  outreach,
   collection,
   catalog,
   marketWatch,

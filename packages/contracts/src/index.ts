@@ -137,3 +137,4 @@ export * from './competitor-research.js';
 export * from './research-conversations.js';
 export * from './collection.js';
 export * from './briefs.js';
+export * from './outreach.js';
