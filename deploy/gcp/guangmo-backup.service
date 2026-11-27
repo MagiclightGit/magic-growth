@@ -1,0 +1,10 @@
+[Unit]
+Description=Guangmo PostgreSQL off-machine backup
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/guangmo/backup.py
+TimeoutStartSec=3700
+Nice=10

@@ -1,0 +1,1 @@
+ALTER TABLE "opportunity_assessments" ADD COLUMN "requested_at" timestamp with time zone DEFAULT now() NOT NULL;

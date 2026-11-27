@@ -1,0 +1,26 @@
+{
+  "name": "@guangmo/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.118",
+    "@guangmo/contracts": "workspace:*",
+    "ai": "^7.0.173",
+    "cheerio": "^1.2.0",
+    "zod": "^4.6.7"
+  },
+  "files": [
+    "dist"
+  ]
+}

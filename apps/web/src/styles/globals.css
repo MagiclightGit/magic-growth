@@ -1,0 +1,153 @@
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/cjk/dist/*.js";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-foreground: var(--primary-soft-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-fg: var(--status-danger-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+:root {
+  --background: #f5f6f7;
+  --foreground: #1f2329;
+  --card: #ffffff;
+  --card-foreground: #1f2329;
+  --popover: #ffffff;
+  --popover-foreground: #1f2329;
+  --sidebar: #ffffff;
+  --primary: #3370ff;
+  --primary-foreground: #ffffff;
+  --primary-soft: #edf3ff;
+  --primary-soft-foreground: #1e4ed8;
+  --secondary: #eff1f5;
+  --secondary-foreground: #1f2329;
+  --muted: #f2f3f5;
+  --muted-foreground: #646a73;
+  --accent: #f0f2f5;
+  --accent-foreground: #1f2329;
+  --destructive: #d93026;
+  --border: #dee0e3;
+  --input: #d0d3d9;
+  --ring: #3370ff;
+  --status-info-bg: #edf3ff;
+  --status-info-fg: #245bdb;
+  --status-success-bg: #e8f7ee;
+  --status-success-fg: #0f7b43;
+  --status-warning-bg: #fff4e5;
+  --status-warning-fg: #b45309;
+  --status-danger-bg: #feecee;
+  --status-danger-fg: #c92a2a;
+  --status-neutral-bg: #f0f1f4;
+  --status-neutral-fg: #525866;
+  --radius: 0.375rem;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  font-size: 14px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+.dark {
+  --background: #14171c;
+  --foreground: #eceff4;
+  --card: #1b1f26;
+  --card-foreground: #eceff4;
+  --popover: #1f242d;
+  --popover-foreground: #eceff4;
+  --sidebar: #181c22;
+  --primary: #4c83ff;
+  --primary-foreground: #ffffff;
+  --primary-soft: #1d2c4a;
+  --primary-soft-foreground: #8fb4ff;
+  --secondary: #252b35;
+  --secondary-foreground: #eceff4;
+  --muted: #222730;
+  --muted-foreground: #9aa2b1;
+  --accent: #272d38;
+  --accent-foreground: #eceff4;
+  --destructive: #e5484d;
+  --border: #2c3340;
+  --input: #363f4f;
+  --ring: #4c83ff;
+  --status-info-bg: #1d2c4a;
+  --status-info-fg: #8fb4ff;
+  --status-success-bg: #143224;
+  --status-success-fg: #57d18c;
+  --status-warning-bg: #3b2a14;
+  --status-warning-fg: #f5b95b;
+  --status-danger-bg: #3d1c21;
+  --status-danger-fg: #f9828b;
+  --status-neutral-bg: #262c36;
+  --status-neutral-fg: #a6aebd;
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply m-0 bg-background text-foreground;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-1 outline-ring;
+  }
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--primary-soft-foreground);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

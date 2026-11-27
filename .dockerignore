@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.turbo
+.env
+.env.*
+coverage
+test-results
+playwright-report
+*.log
+.deployment
+**/__pycache__

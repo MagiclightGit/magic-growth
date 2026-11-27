@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: guangmo
+          POSTGRES_PASSWORD: local-development-only
+          POSTGRES_DB: guangmo
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['56379:6379']
+        options: --health-cmd 'redis-cli ping' --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create isolated CI config
+        run: |
+          cp .env.example .env
+          node --input-type=module -e 'import fs from "node:fs"; import crypto from "node:crypto"; fs.appendFileSync(".env", "\nBETTER_AUTH_SECRET=" + crypto.randomBytes(32).toString("hex") + "\n");'
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm db:migrate
+      - name: Verify real auth, persistence and Worker
+        run: |
+          node --env-file=.env apps/api/dist/main.js > /tmp/guangmo-api.log 2>&1 &
+          API_PID=$!
+          node --env-file=.env apps/worker/dist/main.js > /tmp/guangmo-worker.log 2>&1 &
+          WORKER_PID=$!
+          trap 'kill "$API_PID" "$WORKER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/api/health/ready > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm test:smoke
+          pnpm test:workflow

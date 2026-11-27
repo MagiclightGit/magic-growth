@@ -1,0 +1,45 @@
+{
+  "name": "@guangmo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsc-watch --onSuccess \"node --env-file=../../.env dist/main.js\"",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "admin:create": "node --env-file=../../.env dist/scripts/create-admin.js",
+    "test:smoke": "node --env-file=../../.env dist/scripts/smoke.js",
+    "test:workflow": "node --env-file=../../.env dist/scripts/workflow-smoke.js",
+    "test:schedules": "node --env-file=../../.env dist/scripts/schedule-smoke.js",
+    "test:scoring": "node --env-file=../../.env dist/scripts/scoring-smoke.js",
+    "test:intelligence": "node --env-file=../../.env dist/scripts/intelligence-smoke.js",
+    "test:products": "node --env-file=../../.env dist/scripts/products-smoke.js",
+    "test:market-watch": "node --env-file=../../.env dist/scripts/market-watch-smoke.js",
+    "test:competitor-research": "node --env-file=../../.env dist/scripts/competitor-research-smoke.js",
+    "test:conversations": "node --env-file=../../.env dist/scripts/conversations-smoke.js"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.25",
+    "@guangmo/contracts": "workspace:*",
+    "@guangmo/database": "workspace:*",
+    "@nestjs/common": "^12.5.1",
+    "@nestjs/core": "^12.5.1",
+    "@nestjs/platform-express": "^12.5.1",
+    "better-auth": "^1.7.25",
+    "bullmq": "^6.7.7",
+    "drizzle-orm": "^0.45.4",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "tsc-watch": "^7.2.1"
+  },
+  "files": [
+    "dist"
+  ]
+}

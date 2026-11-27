@@ -1,0 +1,1 @@
+ALTER TABLE "competitor_profiles" ADD COLUMN "relationship" text DEFAULT 'unclassified' NOT NULL;

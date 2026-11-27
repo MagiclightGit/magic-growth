@@ -1,0 +1,42 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        'build',
+        '-f',
+        'deploy/Dockerfile',
+        '--target',
+        'api',
+        '-t',
+        '${_IMAGE_PREFIX}/api:${_RELEASE}',
+        '.',
+      ]
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        'build',
+        '-f',
+        'deploy/Dockerfile',
+        '--target',
+        'worker',
+        '-t',
+        '${_IMAGE_PREFIX}/worker:${_RELEASE}',
+        '.',
+      ]
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        'build',
+        '-f',
+        'deploy/Dockerfile',
+        '--target',
+        'web',
+        '-t',
+        '${_IMAGE_PREFIX}/web:${_RELEASE}',
+        '.',
+      ]
+images:
+  - '${_IMAGE_PREFIX}/api:${_RELEASE}'
+  - '${_IMAGE_PREFIX}/worker:${_RELEASE}'
+  - '${_IMAGE_PREFIX}/web:${_RELEASE}'
+timeout: 1200s

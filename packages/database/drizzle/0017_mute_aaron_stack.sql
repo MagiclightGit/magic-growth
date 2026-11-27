@@ -1,0 +1,1 @@
+ALTER TABLE "research_conversations" ADD COLUMN "memory" jsonb;

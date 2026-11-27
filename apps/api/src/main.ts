@@ -1,0 +1,16 @@
+import 'reflect-metadata';
+import { NestFactory } from '@nestjs/core';
+import express from 'express';
+import helmet from 'helmet';
+import { toNodeHandler } from 'better-auth/node';
+import { AppModule } from './app.module.js';
+import { AuthService } from './modules/auth/auth.service.js';
+import { env } from './config/env.js';
+const app = await NestFactory.create(AppModule, { bodyParser: false });
+app.use(helmet());
+app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
+app.use('/api/auth', toNodeHandler(app.get(AuthService).auth));
+app.use(express.json({ limit: '128kb' }));
+app.setGlobalPrefix('api');
+app.enableShutdownHooks();
+await app.listen(env.API_PORT, env.API_HOST);

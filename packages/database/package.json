@@ -1,0 +1,31 @@
+{
+  "name": "@guangmo/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "node --env-file=../../.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file=../../.env dist/migrate.js"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "@guangmo/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11"
+  },
+  "files": [
+    "dist",
+    "drizzle"
+  ]
+}
