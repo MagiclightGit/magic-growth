@@ -99,14 +99,20 @@ pnpm feishu:intake -- listen --apply --develop
 # 领取队列中的需求，创建 Worktree 并运行检查
 pnpm feishu:intake -- develop --watch
 
-# 自动回写开发结果、PR 状态与 CI 结果
-pnpm feishu:intake -- sync --watch
+# 自动创建草稿 PR、收集 CI 结果并回写原话题
+pnpm feishu:intake -- sync --watch --auto-review
 ```
 
 开发进程串行领取任务，使用 `origin/main` 和 slot 1 创建 Worktree，部署时为此进程保留该 slot。Worktree 跳过主工作区的 `.env`，需要集成测试或截图时使用专用的隔离测试环境。首次飞书建单验收中已有的任务不会被扫描加入开发队列。
 
 开发 Agent 产出改动后，脚本独立运行构建、类型检查、Lint、格式检查和测试。检查日志与差异摘要保存在 `artifacts/feishu-development/<需求编号>/`。失败后保留 Worktree，定位并修复后可通过 `pnpm feishu:intake -- retry --request-id <需求编号>` 重新排队。
 
-人工审阅 Worktree 中的代码和检查输出后，运行 `pnpm feishu:intake -- publish --request-id <需求编号>` 创建草稿 PR。前端改动需在隔离环境运行 `pnpm verify:ui`，并在发布时以 `FEISHU_WORKFLOW_UI_EVIDENCE_URL` 提供该需求的可访问证据链接。发布脚本校验提交树与检查后记录一致，PR 正文仅包含需求编号和检查结果。回写进程在 CI 首次失败和 PR 合并或关闭时通知原话题。CI 的实时进度和通过结果可从 PR 查看。审阅后在发布命令加上 `--auto-merge`，即授权机器人合并该提交。机器人将 PR 标记为可审阅，等 GitHub 的 `CI / verify` 与其余检查全部通过且 PR 可合并，再通过 GitHub 合入 `main`。更新 PR 提交后，自动合并会停在原来授权的提交。生产发布由原有发布流程处理。
+启用 `--auto-review` 或 `FEISHU_WORKFLOW_AUTO_REVIEW=1` 后，回写进程会将开发检查已通过且尚未发布的任务自动发布为草稿 PR。发布脚本校验提交树与检查后记录一致。GitHub CI 运行隔离集成检查，前端变更额外生成桌面及移动端截图。原话题收到 PR 链接、CI 结果和可供有仓库访问权的成员下载的截图。外部系统的真实试接与需求特定的业务验收按需求清单核对。
+
+验收通过后，由获授权的审批人在同一话题 @机器人 发送验收回执给出的 `确认合入 <需求编号> <完整提交 SHA>`。机器人只合并授权的提交，检查 GitHub 的 `CI / verify`、其他检查及可合并状态，合并或关闭后回写原话题。PR 更新后，新提交需要重新验收并授权。生产发布由原有发布流程处理。
+
+手动发布仍可使用 `pnpm feishu:intake -- publish --request-id <需求编号>`。手动发布前端改动时，以 `FEISHU_WORKFLOW_UI_EVIDENCE_URL` 提供隔离环境的截图证据。审阅后可在手动发布命令加 `--auto-merge` 授权合入。
 
 测试群的 README 需求已完成真实审批、建单、排队和 Worktree 开发，五项本地检查通过。首次 CI 在 Redis 容器初始化时失败，失败状态已回到原话题。CI 修复合入后，README PR 同步 `main`、通过 CI 并合入。飞书原话题收到对应提交的 CI 通过与 PR 已合并状态。[README 验收 PR](https://github.com/MagiclightGit/magic-growth/pull/2) · [CI 修复 PR](https://github.com/MagiclightGit/magic-growth/pull/1)
+
+任务中心文案需求 `af899c0cc928` 在隔离环境使用管理员账号完成桌面和移动端截图验收。审阅后授权提交 `f896e1d` 自动合并，CI 通过后机器人将 PR 合入 `main`。飞书原话题收到一条合并回执，包含 PR、CI 结果和截图证据链接。[前端验收 PR](https://github.com/MagiclightGit/magic-growth/pull/4)

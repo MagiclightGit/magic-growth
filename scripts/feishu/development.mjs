@@ -143,7 +143,7 @@ async function develop(root, job) {
   };
 }
 
-async function publish(root, db, job, autoMerge) {
+async function publish(root, db, job, autoMerge, autoReview = false) {
   if (!['review', 'published'].includes(job.status))
     throw new Error('仅可发布已通过开发检查的任务');
   if (job.pr_url && !autoMerge) return;
@@ -152,6 +152,7 @@ async function publish(root, db, job, autoMerge) {
   const evidence = process.env.FEISHU_WORKFLOW_UI_EVIDENCE_URL;
   if (
     report.ui &&
+    !autoReview &&
     (!evidence ||
       !URL.canParse(evidence) ||
       new URL(evidence).protocol !== 'https:')
@@ -238,7 +239,8 @@ async function publish(root, db, job, autoMerge) {
     url,
     JSON.stringify({
       ...report,
-      evidence: report.ui ? evidence : undefined,
+      evidence: report.ui && !autoReview ? evidence : undefined,
+      autoReview: autoReview || report.autoReview || undefined,
       autoMergeHead: autoMerge ? publishedHead : undefined,
     }),
     job.request_id,
@@ -284,68 +286,172 @@ export function prNotification(pr, ci) {
   return null;
 }
 
-async function sync(db) {
+async function reviewEvidence(pr) {
+  const verify = pr.statusCheckRollup.find(
+    (check) => check.workflowName === 'CI' && check.name === 'verify',
+  );
+  const run = new RegExp(
+    `^https://github\\.com/${repository}/actions/runs/(\\d+)/job/\\d+$`,
+  ).exec(verify?.detailsUrl)?.[1];
+  if (!run) return null;
+  const { artifacts } = JSON.parse(
+    await command('gh', [
+      'api',
+      `repos/${repository}/actions/runs/${run}/artifacts`,
+    ]),
+  );
+  const artifact = artifacts.find(
+    (item) => item.name === 'ui-evidence' && !item.expired,
+  );
+  return artifact
+    ? `https://github.com/${repository}/actions/runs/${run}/artifacts/${artifact.id}`
+    : null;
+}
+
+async function sync(root, db, autoReview) {
   for (const job of db
     .prepare(`${jobs} WHERE status IN ('review', 'failed', 'published')`)
     .all()) {
-    const origin = JSON.parse(job.origin);
-    let progress =
-      job.status === 'failed'
-        ? '开发检查失败，请在常驻机查看日志'
-        : '开发检查通过，代码与检查日志已留在常驻机，待审阅';
-    let notificationKey;
-    if (job.pr_url) {
-      let pr = await readPullRequest(job.pr_url);
-      const { autoMergeHead, evidence } = JSON.parse(job.report);
-      if (canAutoMerge(pr, autoMergeHead, `feat/feishu-${job.request_id}`)) {
-        await command('gh', [
-          'pr',
-          'merge',
-          job.pr_url,
-          '--merge',
-          '--match-head-commit',
-          autoMergeHead,
-        ]);
-        pr = await readPullRequest(job.pr_url);
-      }
-      const checks = pr.statusCheckRollup;
-      const state = checks.some(({ conclusion }) =>
-        [
-          'FAILURE',
-          'TIMED_OUT',
-          'CANCELLED',
-          'ACTION_REQUIRED',
-          'STARTUP_FAILURE',
-        ].includes(conclusion),
-      )
-        ? 'CI 未通过'
-        : checks.length &&
-            checks.every(
-              ({ conclusion, status }) =>
-                status === 'COMPLETED' && conclusion === 'SUCCESS',
-            )
-          ? 'CI 已通过'
-          : 'CI 待完成';
-      const notification = prNotification(pr, state);
-      if (!notification) continue;
-      notificationKey = notification.key;
-      progress = `PR ${notification.label}\n${job.pr_url}\n${state}（${pr.headRefOid.slice(0, 7)}）${evidence ? `\nUI 验收证据 ${evidence}` : ''}`;
+    try {
+      await syncJob(root, db, job, autoReview);
+    } catch (error) {
+      if (!autoReview) throw error;
+      console.error(`[feishu] ${job.request_id}: ${error.message}`);
     }
-    const previousFormat = digest(progress);
-    const notice = notificationKey ? digest(notificationKey) : previousFormat;
-    if ([notice, previousFormat].includes(job.notice)) continue;
-    await services.reply(
-      origin.id,
-      `需求 ${job.request_id}\n${progress}`,
-      digest(`dev:${job.request_id}:${notice}`),
-    );
-    db.prepare(
-      'UPDATE development_jobs SET notice = ? WHERE request_id = ?',
-    ).run(notice, job.request_id);
   }
 }
 
-export async function developmentCommand(action, { id, watch, autoMerge }) {
+async function syncJob(root, db, job, autoReview) {
+  const origin = JSON.parse(job.origin);
+  let progress =
+    job.status === 'failed'
+      ? '开发检查失败，请在常驻机查看日志'
+      : '开发检查通过，代码与检查日志已留在常驻机，待审阅';
+  let notificationKey;
+  if (autoReview && job.status === 'review' && !job.pr_url) {
+    try {
+      await publish(root, db, job, false, true);
+      return;
+    } catch (error) {
+      console.error(`[feishu] ${job.request_id}: ${error.message}`);
+      progress =
+        '开发检查已通过，自动创建草稿 PR 失败。请维护者检查常驻机的 GitHub 权限、网络和工作目录，机器人会继续重试。';
+      notificationKey = 'auto-publish-failed';
+    }
+  }
+  if (job.pr_url) {
+    let pr = await readPullRequest(job.pr_url);
+    const report = JSON.parse(job.report);
+    const { autoMergeHead, evidence } = report;
+    const expectedBranch = `feat/feishu-${job.request_id}`;
+    const expectedPullRequest =
+      pr.headRefName === expectedBranch &&
+      pr.baseRefName === 'main' &&
+      !pr.isCrossRepository;
+    const verified =
+      pr.statusCheckRollup.some(
+        (check) => check.workflowName === 'CI' && check.name === 'verify',
+      ) &&
+      pr.statusCheckRollup.every(
+        (check) =>
+          check.status === 'COMPLETED' && check.conclusion === 'SUCCESS',
+      );
+    if (
+      report.autoReview &&
+      pr.state === 'OPEN' &&
+      pr.isDraft &&
+      verified &&
+      autoMergeHead === pr.headRefOid &&
+      report.reviewHead === pr.headRefOid &&
+      expectedPullRequest &&
+      pr.reviewDecision !== 'CHANGES_REQUESTED'
+    ) {
+      await command('gh', ['pr', 'ready', job.pr_url]);
+      pr = await readPullRequest(job.pr_url);
+    }
+    if (canAutoMerge(pr, autoMergeHead, expectedBranch)) {
+      await command('gh', [
+        'pr',
+        'merge',
+        job.pr_url,
+        '--merge',
+        '--match-head-commit',
+        autoMergeHead,
+      ]);
+      pr = await readPullRequest(job.pr_url);
+    }
+    const checks = pr.statusCheckRollup;
+    const state = checks.some(({ conclusion }) =>
+      [
+        'FAILURE',
+        'TIMED_OUT',
+        'CANCELLED',
+        'ACTION_REQUIRED',
+        'STARTUP_FAILURE',
+      ].includes(conclusion),
+    )
+      ? 'CI 未通过'
+      : checks.length &&
+          checks.every(
+            ({ conclusion, status }) =>
+              status === 'COMPLETED' && conclusion === 'SUCCESS',
+          )
+        ? 'CI 已通过'
+        : 'CI 待完成';
+    const notification = prNotification(pr, state);
+    if (notification) {
+      notificationKey = notification.key;
+      progress = `PR ${notification.label}\n${job.pr_url}\n${state}（${pr.headRefOid.slice(0, 7)}）${evidence ? `\nUI 验收证据 ${evidence}` : ''}`;
+    } else if (report.autoReview && !expectedPullRequest) {
+      notificationKey = 'unexpected-pr';
+      progress = `PR 分支或目标分支发生变化，请维护者核对。\n${job.pr_url}`;
+    } else if (report.autoReview && verified) {
+      const screenshot =
+        report.reviewHead === pr.headRefOid
+          ? evidence
+          : report.ui
+            ? await reviewEvidence(pr)
+            : undefined;
+      if (report.ui && !screenshot) {
+        notificationKey = `missing-evidence:${pr.headRefOid}`;
+        progress = `CI 已通过，当前提交尚无截图证据。请维护者检查 CI 的截图步骤和产物。\n${job.pr_url}`;
+      } else if (autoMergeHead === pr.headRefOid) {
+        notificationKey = `merge-waiting:${pr.headRefOid}`;
+        progress = `合入已授权，正在等待 GitHub 允许合并。可在 PR 查看分支冲突或必需审阅。\n${job.pr_url}`;
+      } else {
+        db.prepare(
+          `
+            UPDATE development_jobs
+            SET report = json_set(report, '$.reviewHead', ?, '$.evidence', ?)
+            WHERE request_id = ?
+          `,
+        ).run(pr.headRefOid, screenshot ?? null, job.request_id);
+        notificationKey = `review:${pr.headRefOid}`;
+        progress = `自动检查已通过，草稿 PR 待审阅。\n${job.pr_url}${screenshot ? `\n桌面与移动端截图 ${screenshot}` : ''}\n请核对代码和需求中的业务验收项。通过后在本话题 @机器人 发送：确认合入 ${job.request_id} ${pr.headRefOid}`;
+      }
+    } else if (report.autoReview) {
+      notificationKey = `pr-open:${pr.headRefOid}`;
+      progress = `草稿 PR 已创建，GitHub 正在运行隔离验收。\n${job.pr_url}`;
+    } else return;
+  }
+  const previousFormat = digest(progress);
+  const notice = notificationKey ? digest(notificationKey) : previousFormat;
+  if ([notice, previousFormat].includes(job.notice)) return;
+  await services.reply(
+    origin.id,
+    `需求 ${job.request_id}\n${progress}`,
+    digest(`dev:${job.request_id}:${notice}`),
+  );
+  db.prepare('UPDATE development_jobs SET notice = ? WHERE request_id = ?').run(
+    notice,
+    job.request_id,
+  );
+}
+
+export async function developmentCommand(
+  action,
+  { id, watch, autoMerge, autoReview },
+) {
   const root = process.cwd();
   const db = openWorkflow(
     process.env.FEISHU_WORKFLOW_DB ?? 'artifacts/feishu-intake/workflow.sqlite',
@@ -371,7 +477,12 @@ export async function developmentCommand(action, { id, watch, autoMerge }) {
         try {
           if (action === 'develop')
             await runDevelopment(db, (job) => develop(root, job));
-          else await sync(db);
+          else
+            await sync(
+              root,
+              db,
+              autoReview || process.env.FEISHU_WORKFLOW_AUTO_REVIEW === '1',
+            );
         } catch (error) {
           if (!watch) throw error;
           console.error(error.message);

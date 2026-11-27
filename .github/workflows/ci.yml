@@ -48,6 +48,19 @@ jobs:
       - run: pnpm format:check
       - run: pnpm test
       - run: pnpm db:migrate
+      - name: Detect Feishu frontend changes
+        id: feishu-ui
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/feishu-')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          if [ -n "$(git diff --name-only "$BASE_SHA" HEAD -- apps/web)" ]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install screenshot browser
+        if: steps.feishu-ui.outputs.required == 'true'
+        run: pnpm exec playwright install --with-deps chromium
       - name: Verify real auth, persistence and Worker
         run: |
           node --env-file=.env apps/api/dist/main.js > /tmp/guangmo-api.log 2>&1 &
@@ -61,3 +74,49 @@ jobs:
           done
           pnpm test:smoke
           pnpm test:workflow
+      - name: Capture desktop and mobile evidence
+        if: steps.feishu-ui.outputs.required == 'true'
+        run: |
+          VERIFY_UI_PASSWORD="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(24).toString("hex"))')"
+          export VERIFY_UI_PASSWORD
+          export VERIFY_UI_EMAIL=review@example.test
+          export VERIFY_UI_URL=http://127.0.0.1:5173
+          export WEB_ORIGIN="$VERIFY_UI_URL" BETTER_AUTH_URL="$VERIFY_UI_URL"
+          node --env-file=.env --input-type=module <<'JS'
+          import { createDatabase } from './packages/database/dist/index.js';
+          import { provisionMember } from './apps/api/dist/modules/members/provision-member.js';
+          const { db, pool } = createDatabase(process.env.DATABASE_URL);
+          try {
+            await provisionMember(db, {
+              name: 'CI Reviewer',
+              email: process.env.VERIFY_UI_EMAIL,
+              password: process.env.VERIFY_UI_PASSWORD,
+              role: 'admin',
+            });
+          } finally {
+            await pool.end();
+          }
+          JS
+          node --env-file=.env apps/api/dist/main.js > /tmp/guangmo-ui-api.log 2>&1 &
+          API_PID=$!
+          node --dns-result-order=ipv4first apps/web/node_modules/vite/bin/vite.js preview apps/web --host 127.0.0.1 --port 5173 --strictPort > /tmp/guangmo-ui-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$API_PID" "$WEB_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS "$VERIFY_UI_URL/api/health/ready" > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS "$VERIFY_UI_URL/api/health/ready" > /dev/null
+          node --input-type=module <<'JS' > "$RUNNER_TEMP/feishu-ui-routes"
+          import { readFileSync } from 'node:fs';
+          const router = readFileSync('apps/web/src/app/router.tsx', 'utf8');
+          const pages = [...router.matchAll(/\bpath:\s*['"]([a-z][a-z0-9/-]*)['"]/g)];
+          process.stdout.write(['/', ...pages.map((page) => '/' + page[1])].join(','));
+          JS
+          VERIFY_UI_ROUTES="$(cat "$RUNNER_TEMP/feishu-ui-routes")" pnpm verify:ui
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.feishu-ui.outputs.required == 'true'
+        with:
+          name: ui-evidence
+          path: artifacts/ui-evidence
+          if-no-files-found: warn

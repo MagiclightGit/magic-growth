@@ -231,3 +231,72 @@ test('development queue claims once and persists failures and completed checks',
     db.close();
   }
 });
+
+test('Feishu merge authorization binds an approved thread to its verified commit', async () => {
+  const db = openWorkflow(':memory:');
+  const id = 'f31e29dc0125';
+  const head = 'a'.repeat(40);
+  const config = {
+    chats: new Set([event.chat_id]),
+    bot: 'ou_bot',
+    approvers: new Set(['ou_approver']),
+  };
+  const services = { reply: async () => 'om_reply' };
+  try {
+    db.prepare(
+      'INSERT INTO requests (id, origin, draft, revision, reply_id, approved_by) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(
+      id,
+      JSON.stringify({
+        id: 'om_request',
+        root: 'om_request',
+        chat: event.chat_id,
+        thread: 'omt_review',
+      }),
+      '{"needsDecision":false}',
+      'revision',
+      'om_draft',
+      'ou_approver',
+    );
+    db.prepare(
+      "INSERT INTO development_jobs (request_id, status, report) VALUES (?, 'published', ?)",
+    ).run(id, JSON.stringify({ reviewHead: head }));
+    const approvedHead = () =>
+      db
+        .prepare(
+          "SELECT json_extract(report, '$.autoMergeHead') AS head FROM development_jobs",
+        )
+        .get().head;
+    for (const [message_id, changes] of [
+      ['om_outsider', { sender_id: 'ou_author' }],
+      ['om_other_thread', { thread_id: 'omt_other' }],
+      [
+        'om_stale_head',
+        { content: `@_user_1 确认合入 ${id} ${'b'.repeat(40)}` },
+      ],
+      ['om_reviewed_head', {}],
+    ]) {
+      const message = inbound(
+        {
+          ...event,
+          message_id,
+          root_id: 'om_request_reply',
+          thread_id: 'omt_review',
+          sender_id: 'ou_approver',
+          content: `@_user_1 确认合入 ${id} ${head}`,
+          ...changes,
+        },
+        config,
+      );
+      assert.ok(message);
+      recordEvent(db, message);
+      assert.deepEqual(await processInbox(db, config, services), []);
+      assert.equal(
+        approvedHead(),
+        message_id === 'om_reviewed_head' ? head : null,
+      );
+    }
+  } finally {
+    db.close();
+  }
+});
