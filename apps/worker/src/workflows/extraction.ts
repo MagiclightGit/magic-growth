@@ -60,7 +60,6 @@ export async function executeExtraction(
     throw new Error('研究报告尚未完成');
   if (!(await canAccessProduct(db, owner.id, run.product, true)))
     throw new Error('产品已归档或产品权限已撤销');
-  if (!model.apiKey || !model.model) throw new Error('研究服务尚未配置');
   await db
     .update(growth.researchExtractions)
     .set({ status: 'running', attempts: attempt, error: null })

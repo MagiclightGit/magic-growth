@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -13,12 +14,12 @@ jobs:
           POSTGRES_USER: guangmo
           POSTGRES_PASSWORD: local-development-only
           POSTGRES_DB: guangmo
-        ports: ['55432:5432']
+        ports: ['5432/tcp']
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
-        ports: ['56379:6379']
-        options: --health-cmd 'redis-cli ping' --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ['6379/tcp']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -28,9 +29,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Create isolated CI config
+        env:
+          CI_POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          CI_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
         run: |
-          cp .env.example .env
-          node --input-type=module -e 'import fs from "node:fs"; import crypto from "node:crypto"; fs.appendFileSync(".env", "\nBETTER_AUTH_SECRET=" + crypto.randomBytes(32).toString("hex") + "\n");'
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { randomBytes } from 'node:crypto';
+          const config = fs.readFileSync('.env.example', 'utf8')
+            .replace('127.0.0.1:55432', `127.0.0.1:${process.env.CI_POSTGRES_PORT}`)
+            .replace('127.0.0.1:56379', `127.0.0.1:${process.env.CI_REDIS_PORT}`)
+            .replace(/^BETTER_AUTH_SECRET=$/m, `BETTER_AUTH_SECRET=${randomBytes(32).toString('hex')}`);
+          fs.writeFileSync('.env', config, { mode: 0o600 });
+          JS
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint

@@ -169,7 +169,7 @@ record(
 );
 
 // 6. API health (required only with --require-running)
-const apiPort = Number(env.get('PORT') || 3001);
+const apiPort = Number(env.get('API_PORT') || 3001);
 let apiOk;
 try {
   const res = await fetch(`http://127.0.0.1:${apiPort}/api/health/ready`, {
@@ -202,7 +202,7 @@ record(
   hasPlaywright ? '已安装，可执行 pnpm verify:ui' : '未安装',
   hasPlaywright
     ? ''
-    : '安装后可自动采集页面截图证据：pnpm add -D -w playwright && pnpm exec playwright install chromium',
+    : '运行 pnpm install --frozen-lockfile && pnpm exec playwright install chromium',
 );
 
 const larkCli = runText('which', ['lark-cli']);

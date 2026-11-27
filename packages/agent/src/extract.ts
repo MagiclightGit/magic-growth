@@ -50,14 +50,15 @@ async function extract(
     report: string;
     goal: string;
     sources: ExtractionSource[];
-    apiKey: string;
+    apiKey?: string;
     baseURL?: string;
-    model: string;
+    model?: string;
   },
   withTime: boolean,
 ) {
   const sources = reportSources(options.report, options.sources);
   if (!sources.length) return [];
+  if (!options.apiKey || !options.model) throw new Error('研究服务尚未配置');
   const provider = createOpenAI({
     apiKey: options.apiKey,
     baseURL: options.baseURL,
